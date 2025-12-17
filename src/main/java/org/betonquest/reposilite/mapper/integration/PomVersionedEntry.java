@@ -37,6 +37,8 @@ public record PomVersionedEntry(Artifact artifact, String group, String maven, M
     public boolean isNewerThan(final String version) {
         final DefaultArtifactVersion foreignVersion = new DefaultArtifactVersion(version);
         final DefaultArtifactVersion localVersion = new DefaultArtifactVersion(maven);
-        return localVersion.compareTo(foreignVersion) > 0;
+        final DefaultArtifactVersion groupVersion = new DefaultArtifactVersion(group);
+        final int preCompare = groupVersion.compareTo(foreignVersion);
+        return preCompare == 0 ? localVersion.compareTo(foreignVersion) > 0 : preCompare > 0;
     }
 }
