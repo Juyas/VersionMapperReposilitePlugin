@@ -116,7 +116,13 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                     return Unit.INSTANCE;
                 }
                 debug("Trying to redirect to accessor for gav \"" + gav + "\" in repository \"" + repository + "\".");
-                ctx.redirect(SERVICE_ACCESSOR_PATH.replace("{id}", artifact.id()), HttpStatus.TEMPORARY_REDIRECT);
+                String query = ctx.queryString();
+                if (query == null || query.isBlank()) {
+                    query = "";
+                } else {
+                    query = "?" + query;
+                }
+                ctx.redirect(SERVICE_ACCESSOR_PATH.replace("{id}", artifact.id()) + query, HttpStatus.TEMPORARY_REDIRECT);
                 return Unit.INSTANCE;
             });
             return null;
