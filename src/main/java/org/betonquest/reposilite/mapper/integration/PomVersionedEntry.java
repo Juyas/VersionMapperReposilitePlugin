@@ -1,6 +1,7 @@
 package org.betonquest.reposilite.mapper.integration;
 
 import com.reposilite.storage.api.Location;
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.betonquest.reposilite.mapper.settings.Artifact;
 
 import java.util.Map;
@@ -24,5 +25,18 @@ public record PomVersionedEntry(Artifact artifact, String group, String maven, M
      */
     public boolean isSnapshot() {
         return group.endsWith("-SNAPSHOT");
+    }
+
+    /**
+     * Checks if the given version is newer than the current group version
+     * using {@link org.apache.maven.artifact.versioning.ArtifactVersion}.
+     *
+     * @param version the version to compare to
+     * @return true if the given version is newer, false otherwise
+     */
+    public boolean isNewerThan(final String version) {
+        final DefaultArtifactVersion foreignVersion = new DefaultArtifactVersion(version);
+        final DefaultArtifactVersion localVersion = new DefaultArtifactVersion(maven);
+        return localVersion.compareTo(foreignVersion) > 0;
     }
 }

@@ -43,15 +43,17 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
     private final PomMapperFacade baseFacade;
 
     @OpenApi(
-            path = SERVICE_ACCESSOR_PATH,
+            path = SERVICE_ID_PATH,
             methods = HttpMethod.GET,
             tags = "PomMapper",
             summary = "Returns all versions with their downloadable jars by internal id.",
             description = "The internal id as defined in the reposilite configuration section.",
             pathParams = @OpenApiParam(name = "id", description = "The internal id of the artifact as defined in configuration.", required = true, example = "MyCoolArtifact"),
             queryParams = {
-                    @OpenApiParam(name = SERVICE_ACCESSOR_QPARAM_NAME_SNAPSHOT, description = "Whether snapshot versions are listed." + SERVICE_ACCESSOR_QPARAM_DEFAULT_SNAPSHOT + " by default.", example = "false", type = Boolean.class),
-                    @OpenApiParam(name = SERVICE_ACCESSOR_QPARAM_NAME_RELEASE, description = "Whether release versions are listed. " + SERVICE_ACCESSOR_QPARAM_DEFAULT_RELEASE + " by default.", example = "false", type = Boolean.class)
+                    @OpenApiParam(name = SERVICE_ID_QPARAM_NAME_SNAPSHOT, description = "Whether snapshot versions are listed." + SERVICE_ID_QPARAM_DEFAULT_SNAPSHOT + " by default.", example = "false", type = Boolean.class),
+                    @OpenApiParam(name = SERVICE_ID_QPARAM_NAME_RELEASE, description = "Whether release versions are listed. " + SERVICE_ID_QPARAM_DEFAULT_RELEASE + " by default.", example = "false", type = Boolean.class),
+                    @OpenApiParam(name = SERVICE_ID_QPARAM_NAME_LIMIT_VERSIONS, description = "The maximum amount of elements per group to return. " + SERVICE_ID_QPARAM_DEFAULT_LIMIT_VERSIONS + " by default.", example = "10", type = Integer.class),
+                    @OpenApiParam(name = SERVICE_ID_QPARAM_NAME_SINCE, description = "Only return versions newer than the given version.", example = "1.2.3")
             },
             responses = {
                     @OpenApiResponse(status = "200", description = "Valid result containing a list of all mapped versions with their jar paths", content = @OpenApiContent(from = String.class, type = ContentType.JSON)),
@@ -59,13 +61,13 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                     @OpenApiResponse(status = "404", description = "Internal id not found")
             }
     )
-    private final ReposiliteRoute<Void> serviceAccess = new ReposiliteRoute<>(SERVICE_ACCESSOR_PATH_REPOSILITE, new Route[]{Route.HEAD, Route.GET}, context -> {
+    private final ReposiliteRoute<Void> serviceAccess = new ReposiliteRoute<>(SERVICE_ID_PATH_REPOSILITE, new Route[]{Route.HEAD, Route.GET}, context -> {
         serviceAccessHandler(context);
         return Unit.INSTANCE;
     });
 
     @OpenApi(
-            path = SERVICE_DIRECT_PATH,
+            path = SERVICE_REPOSITORY_PATH,
             methods = HttpMethod.GET,
             tags = "PomMapper",
             summary = "Returns all versions with their downloadable jars by their gav.",
@@ -75,8 +77,10 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                     @OpenApiParam(name = "gav", description = "Artifact path qualifier", required = true, allowEmptyValue = true)
             },
             queryParams = {
-                    @OpenApiParam(name = SERVICE_DIRECT_QPARAM_NAME_SNAPSHOT, description = "Whether snapshot versions are listed." + SERVICE_DIRECT_QPARAM_DEFAULT_SNAPSHOT + " by default.", example = "false", type = Boolean.class),
-                    @OpenApiParam(name = SERVICE_DIRECT_QPARAM_NAME_RELEASE, description = "Whether release versions are listed. " + SERVICE_DIRECT_QPARAM_DEFAULT_RELEASE + " by default.", example = "false", type = Boolean.class)
+                    @OpenApiParam(name = SERVICE_REPOSITORY_QPARAM_NAME_SNAPSHOT, description = "Whether snapshot versions are listed." + SERVICE_REPOSITORY_QPARAM_DEFAULT_SNAPSHOT + " by default.", example = "false", type = Boolean.class),
+                    @OpenApiParam(name = SERVICE_REPOSITORY_QPARAM_NAME_RELEASE, description = "Whether release versions are listed. " + SERVICE_REPOSITORY_QPARAM_DEFAULT_RELEASE + " by default.", example = "false", type = Boolean.class),
+                    @OpenApiParam(name = SERVICE_REPOSITORY_QPARAM_NAME_LIMIT_VERSIONS, description = "The maximum amount of elements per group to return. " + SERVICE_REPOSITORY_QPARAM_DEFAULT_LIMIT_VERSIONS + " by default.", example = "10", type = Integer.class),
+                    @OpenApiParam(name = SERVICE_REPOSITORY_QPARAM_NAME_SINCE, description = "Only return versions newer than the given version.", example = "1.2.3")
             },
             responses = {
                     @OpenApiResponse(status = "200", description = "Valid result containing a list of all mapped versions with their jar paths", content = @OpenApiContent(from = String.class, type = ContentType.JSON)),
@@ -84,7 +88,7 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                     @OpenApiResponse(status = "404", description = "Target not found")
             }
     )
-    private final ReposiliteRoute<Void> serviceDirect = new ReposiliteRoute<>(SERVICE_DIRECT_PATH_REPOSILITE, new Route[]{Route.HEAD, Route.GET}, context -> {
+    private final ReposiliteRoute<Void> serviceDirect = new ReposiliteRoute<>(SERVICE_REPOSITORY_PATH_REPOSILITE, new Route[]{Route.HEAD, Route.GET}, context -> {
         serviceDirectHandler(context);
         return Unit.INSTANCE;
     });
@@ -116,7 +120,13 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                     return Unit.INSTANCE;
                 }
                 debug("Trying to redirect to accessor for gav \"" + gav + "\" in repository \"" + repository + "\".");
-                ctx.redirect(SERVICE_ACCESSOR_PATH.replace("{id}", artifact.id()), HttpStatus.TEMPORARY_REDIRECT);
+                String query = ctx.queryString();
+                if (query == null || query.isBlank()) {
+                    query = "";
+                } else {
+                    query = "?" + query;
+                }
+                ctx.redirect(SERVICE_ID_PATH.replace("{id}", artifact.id()) + query, HttpStatus.TEMPORARY_REDIRECT);
                 return Unit.INSTANCE;
             });
             return null;
@@ -142,15 +152,19 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
                 return null;
             }
 
-            final boolean considerSnapshots = readOptionalQuery(ctx, SERVICE_ACCESSOR_QPARAM_NAME_SNAPSHOT, Boolean.class, SERVICE_ACCESSOR_QPARAM_DEFAULT_SNAPSHOT);
-            final boolean considerReleases = readOptionalQuery(ctx, SERVICE_ACCESSOR_QPARAM_NAME_RELEASE, Boolean.class, SERVICE_ACCESSOR_QPARAM_DEFAULT_RELEASE);
+            final boolean considerSnapshots = readOptionalQuery(ctx, SERVICE_ID_QPARAM_NAME_SNAPSHOT, Boolean.class, SERVICE_ID_QPARAM_DEFAULT_SNAPSHOT);
+            final boolean considerReleases = readOptionalQuery(ctx, SERVICE_ID_QPARAM_NAME_RELEASE, Boolean.class, SERVICE_ID_QPARAM_DEFAULT_RELEASE);
+            final int limit = readOptionalQuery(ctx, SERVICE_ID_QPARAM_NAME_LIMIT_VERSIONS, Integer.class, SERVICE_ID_QPARAM_DEFAULT_LIMIT_VERSIONS);
+            final String since = readOptionalQuery(ctx, SERVICE_ID_QPARAM_NAME_SINCE, String.class, SERVICE_ID_QPARAM_DEFAULT_SINCE);
 
             debug("Found " + entries.size() + " entries for id \"" + id + "\"");
+            debug("filter with: snapshots=\"" + considerSnapshots + "\", releases=\"" + considerReleases + "\", limit=\"" + limit + "\", since=\"" + since + "\"");
 
-            final Predicate<PomVersionedEntry> queryParamFilter = version ->
+            final Predicate<PomVersionedEntry> filterTypes = version ->
                     considerSnapshots && version.isSnapshot() || considerReleases && !version.isSnapshot();
+            final Predicate<PomVersionedEntry> filterSince = version -> version.isNewerThan(since);
 
-            final JsonArray result = resolve(entries, queryParamFilter);
+            final JsonArray result = resolve(entries, filterTypes.and(filterSince), limit);
 
             ctx.status(HttpStatus.OK).result(gson.toJson(result));
             return null;
@@ -161,7 +175,7 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
         return ctx.queryParamAsClass(param, result).getOrDefault(defaultValue);
     }
 
-    private JsonArray resolve(final List<PomVersionedEntry> versions, final Predicate<PomVersionedEntry> queryParamFilter) {
+    private JsonArray resolve(final List<PomVersionedEntry> versions, final Predicate<PomVersionedEntry> queryParamFilter, final int limit) {
         final Map<String, List<Map.Entry<DefaultArtifactVersion, JsonObject>>> groups = new HashMap<>();
         extractGroups(versions, queryParamFilter).forEach(group -> groups.put(group, new ArrayList<>()));
         versions.stream().filter(queryParamFilter).forEach(version ->
@@ -170,11 +184,13 @@ public class RestfulRoutes extends MavenRoutes implements RestfulDefinitions {
         debug("Resolved " + groups.size() + " maven version groups.");
 
         final Comparator<Map.Entry<DefaultArtifactVersion, JsonObject>> comp = Map.Entry.comparingByKey();
-        groups.values().forEach(list -> list.sort(comp.reversed()));
-
         final List<Map.Entry<DefaultArtifactVersion, JsonObject>> objects = new ArrayList<>();
         groups.forEach((tag, entries) -> {
             final JsonObject group = new JsonObject();
+            entries.sort(comp.reversed());
+            if (limit > 0 && limit < entries.size()) {
+                entries.subList(limit, entries.size()).clear();
+            }
             group.addProperty(RESULT_JSON_KEY_GROUP, tag);
             group.add(RESULT_JSON_KEY_VERSIONS, entries.stream().map(Map.Entry::getValue).collect(JsonArray::new, JsonArray::add, JsonArray::addAll));
             objects.add(Map.entry(new DefaultArtifactVersion(tag), group));
